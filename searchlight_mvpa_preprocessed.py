@@ -133,13 +133,17 @@ def _create_nifti(
     selector: Boolean or index array selecting the voxels used for the matrix.
     metadata: dict containing voxel_i, voxel_j, voxel_k arrays (for full dataset).
     """
-    voxel_i = metadata["voxel_i"][selector].astype(int)
-    voxel_j = metadata["voxel_j"][selector].astype(int)
-    voxel_k = metadata["voxel_k"][selector].astype(int)
+    full_voxel_i = metadata["voxel_i"].astype(int)
+    full_voxel_j = metadata["voxel_j"].astype(int)
+    full_voxel_k = metadata["voxel_k"].astype(int)
 
-    nx = int(voxel_i.max() + 1)
-    ny = int(voxel_j.max() + 1)
-    nz = int(voxel_k.max() + 1)
+    voxel_i = full_voxel_i[selector].astype(int)
+    voxel_j = full_voxel_j[selector].astype(int)
+    voxel_k = full_voxel_k[selector].astype(int)
+
+    nx = int(full_voxel_i.max() + 1)
+    ny = int(full_voxel_j.max() + 1)
+    nz = int(full_voxel_k.max() + 1)
     n_samples = matrix.shape[0]
 
     volume = np.zeros((nx, ny, nz, n_samples), dtype=np.float32)
