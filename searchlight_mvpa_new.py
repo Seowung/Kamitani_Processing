@@ -7,7 +7,7 @@ python searchlight_mvpa_new.py \
   --sub 01 \
   --task CowenKeltnerEmotionMovie \
   --space MNI152NLin2009cAsym \
-  --radius 5.0 \
+  --radius 10.0 \
   --cond_pos unpleasant \
   --cond_neg neutral \
   --use_aparcaseg_visual \
