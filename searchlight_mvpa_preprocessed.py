@@ -126,30 +126,43 @@ def _create_nifti(
     matrix: np.ndarray,
     selector: np.ndarray,
     metadata: dict[str, np.ndarray],
+    reference_img: nib.Nifti1Image | None = None,
 ) -> tuple[nib.Nifti1Image, nib.Nifti1Image]:
-    """Convert a matrix of voxel responses into a 4-D NIfTI image.
 
-    matrix: (n_samples, n_voxels)
-    selector: Boolean or index array selecting the voxels used for the matrix.
-    metadata: dict containing voxel_i, voxel_j, voxel_k arrays (for full dataset).
-    """
     voxel_i = metadata["voxel_i"][selector].astype(int)
     voxel_j = metadata["voxel_j"][selector].astype(int)
     voxel_k = metadata["voxel_k"][selector].astype(int)
 
-    nx = int(voxel_i.max() + 1)
-    ny = int(voxel_j.max() + 1)
-    nz = int(voxel_k.max() + 1)
+    if reference_img is not None:
+        nx, ny, nz = reference_img.shape[:3]
+        affine = reference_img.affine
+        header = reference_img.header.copy()
+    else:
+        nx = int(voxel_i.max() + 1)
+        ny = int(voxel_j.max() + 1)
+        nz = int(voxel_k.max() + 1)
+        affine = np.eye(4)
+        header = None
+
     n_samples = matrix.shape[0]
 
     volume = np.zeros((nx, ny, nz, n_samples), dtype=np.float32)
-    mask = np.zeros((nx, ny, nz), dtype=np.uint8)
+    mask   = np.zeros((nx, ny, nz), dtype=np.uint8)
 
     volume[voxel_i, voxel_j, voxel_k] = matrix.T
     mask[voxel_i, voxel_j, voxel_k] = 1
 
-    affine = np.eye(4)
-    return nib.Nifti1Image(volume, affine), nib.Nifti1Image(mask, affine)
+    fmri_img = nib.Nifti1Image(volume, affine, header=header)
+    mask_img = nib.Nifti1Image(mask,   affine, header=header)
+    # Keep sform/qform consistent
+    if header is not None:
+        fmri_img.set_sform(affine, code=1)
+        fmri_img.set_qform(affine, code=1)
+        mask_img.set_sform(affine, code=1)
+        mask_img.set_qform(affine, code=1)
+
+    return fmri_img, mask_img
+
 
 
 def _encode_labels(labels: Sequence) -> tuple[np.ndarray, list[str]]:
@@ -429,8 +442,9 @@ def run_searchlight(
         raise ValueError("Searchlight requires at least two classes after filtering/averaging.")
 
     # Build 4D NIfTI from the (possibly filtered/averaged) samples
+    ref_img = nib.load("/orange/ruogu.fang/leem.s/EmotionVideo/Kamitani/derivatives/sub-01/ses-anatomy/anat/sub-01_ses-anatomy_desc-preproc_T1w.nii.gz")
     metadata = {k: np.asarray(bdata.get_metadata(k)) for k in ["voxel_i", "voxel_j", "voxel_k"]}
-    fmri_img, mask_img = _create_nifti(matrix, selector, metadata)
+    fmri_img, mask_img = _create_nifti(matrix, selector, metadata, reference_img=ref_img)
 
     # Estimator
     if estimator == "svc":
@@ -451,7 +465,9 @@ def run_searchlight(
     searchlight.fit(fmri_img, y)
 
     # Save outputs
-    scores_img = nib.Nifti1Image(searchlight.scores_, fmri_img.affine)
+    scores_img = nib.Nifti1Image(searchlight.scores_, fmri_img.affine, header=fmri_img.header)
+    scores_img.set_sform(fmri_img.affine, code=1)
+    scores_img.set_qform(fmri_img.affine, code=1)
     nii_path = output_dir / "searchlight_scores.nii.gz"
     scores_img.to_filename(str(nii_path))
 
